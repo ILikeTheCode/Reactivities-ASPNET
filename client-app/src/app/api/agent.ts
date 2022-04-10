@@ -5,25 +5,22 @@ import { Activity } from '../models/activity';
 import { store } from '../stores/store';
 
 const sleep = (delay: number) => {
-     return new Promise((resolve) => {
-         setTimeout(resolve, delay)
-     })
+    return new Promise((resolve) => {
+        setTimeout(resolve, delay)
+    })
 }
 
 axios.defaults.baseURL = 'http://localhost:5000/api';
 
 axios.interceptors.response.use(async response => {
-        await sleep(1000);
-        return response;
+    await sleep(1000);
+    return response;
 }, (error: AxiosError) => {
     const {data, status, config} = error.response!;
     switch (status) {
         case 400:
-            if (typeof data === 'string') {
-                toast.error(data);
-            }
             if (config.method === 'get' && data.errors.hasOwnProperty('id')) {
-                history.push('/not-found'); 
+                history.push('/not-found');
             }
             if (data.errors) {
                 const modalStateErrors = [];
@@ -33,29 +30,31 @@ axios.interceptors.response.use(async response => {
                     }
                 }
                 throw modalStateErrors.flat();
+            } else {
+                toast.error(data);
             }
             break;
         case 401:
-            toast.error('Unauthorised');
+            toast.error('unauthorised');
             break;
         case 404:
-            history.push('/not-found')
+            history.push('/not-found');
             break;
         case 500:
             store.commonStore.setServerError(data);
             history.push('/server-error');
-            break; 
+            break;
     }
-    return Promise.reject(error); 
+    return Promise.reject(error);
 })
 
-const responseBody = <T> (response: AxiosResponse<T>) => response.data;
+const responseBody = <T>(response: AxiosResponse<T>) => response.data;
 
 const requests = {
-    get: <T> (url: string) => axios.get<T>(url).then(responseBody),
-    post: <T> (url: string, body: {}) => axios.post<T>(url, body).then(responseBody),
-    put: <T> (url: string, body: {}) => axios.put<T>(url, body).then(responseBody),
-    del: <T> (url: string) => axios.delete<T>(url).then(responseBody),
+    get: <T>(url: string) => axios.get<T>(url).then(responseBody),
+    post: <T>(url: string, body: {}) => axios.post<T>(url, body).then(responseBody),
+    put: <T>(url: string, body: {}) => axios.put<T>(url, body).then(responseBody),
+    del: <T>(url: string) => axios.delete<T>(url).then(responseBody),
 }
 
 const Activities = {

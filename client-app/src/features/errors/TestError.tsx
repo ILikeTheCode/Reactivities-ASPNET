@@ -4,7 +4,7 @@ import axios from 'axios';
 import ValidationErrors from './ValidationErrors';
 
 export default function TestErrors() {
-    const baseUrl = 'http://localhost:5000/api/';
+    const baseUrl = 'http://localhost:5000/api/'
     const [errors, setErrors] = useState(null);
 
     function handleNotFound() {
@@ -24,7 +24,7 @@ export default function TestErrors() {
     }
 
     function handleBadGuid() {
-        axios.get(baseUrl + 'activities/notaguid').catch(err => console.log(err.response));
+        axios.get(baseUrl + 'activities/notaguid').catch(err => console.log(err));
     }
 
     function handleValidationError() {
@@ -44,7 +44,7 @@ export default function TestErrors() {
                     <Button onClick={handleBadGuid} content='Bad Guid' basic primary />
                 </Button.Group>
             </Segment>
-            {errors && 
+            {errors &&
                 <ValidationErrors errors={errors} />
             }
         </>
