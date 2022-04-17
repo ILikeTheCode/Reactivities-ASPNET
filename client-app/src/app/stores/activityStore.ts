@@ -1,9 +1,10 @@
-import { makeAutoObservable, runInAction } from "mobx";
+import { makeAutoObservable, reaction, runInAction } from "mobx";
 import agent from "../api/agent";
 import { Activity, ActivityFormValues } from "../models/activity";
 import { format } from "date-fns";
 import { store } from "./store";
 import { Profile } from "../models/profile";
+import { Pagination, PagingParams } from "../models/pagination";
 
 export default class ActivityStore {
   activityRegistry = new Map<string, Activity>();
@@ -11,9 +12,64 @@ export default class ActivityStore {
   editMode = false;
   loading = false;
   loadingInitial = false;
+  pagination: Pagination | null = null;
+  pagingParams = new PagingParams();
+  predicate = new Map().set('all', true);
 
   constructor() {
     makeAutoObservable(this);
+
+    reaction(
+      () => this.predicate.keys(),
+      () => {
+        this.pagingParams = new PagingParams();
+        this.activityRegistry.clear();
+        this.loadActivities();
+      }
+    )
+  }
+
+  setPagingParams = (pagingParams: PagingParams) => {
+    this.pagingParams = pagingParams;
+  };
+
+  setPredicate = (predicate: string, value: string | Date) => {
+    const resetPredicate = () => {
+      this.predicate.forEach((value, key) => {
+        if (key !== 'startDate') this.predicate.delete(key);
+      })
+    }
+    switch (predicate) {
+      case 'all':
+        resetPredicate();
+        this.predicate.set('all', true);
+        break;
+      case 'isGoing':
+        resetPredicate();
+        this.predicate.set('isGoing', true);
+        break;
+      case 'isHost':
+        resetPredicate();
+        this.predicate.set('isHost', true);
+        break;
+      case 'startDate':
+        this.predicate.delete('startDate');
+        this.predicate.set('startDate', value);
+    }
+  }
+
+  get axiosParams() {
+    const params = new URLSearchParams();
+    params.append("pageNumber", this.pagingParams.pageNumber.toString());
+    params.append("pageSize", this.pagingParams.pageSize.toString());
+    this.predicate.forEach((value, key) => {
+      if (key === 'startDate') {
+        params.append(key, (value as Date).toISOString())
+      } else {
+        params.append(key, value);
+      }
+    })
+    return params;
   }
 
   get activitiesByDate() {
@@ -37,15 +93,20 @@ export default class ActivityStore {
   loadActivities = async () => {
     this.loadingInitial = true;
     try {
-      const activities = await agent.Activities.list();
-      activities.forEach((activity) => {
+      const result = await agent.Activities.list(this.axiosParams);
+      result.data.forEach((activity) => {
         this.setActivity(activity);
       });
+      this.setPagination(result.pagination);
       this.setLoadingInitial(false);
     } catch (error) {
       console.log(error);
       this.setLoadingInitial(false);
     }
+  };
+
+  setPagination = (pagination: Pagination) => {
+    this.pagination = pagination;
   };
 
   loadActivity = async (id: string) => {
@@ -117,7 +178,10 @@ export default class ActivityStore {
       await agent.Activities.update(activity);
       runInAction(() => {
         if (activity.id) {
-          let updatedActivity = {...this.getActivity(activity.id), ...activity}
+          let updatedActivity = {
+            ...this.getActivity(activity.id),
+            ...activity,
+          };
           this.activityRegistry.set(activity.id, updatedActivity as Activity);
           this.selectedActivity = updatedActivity as Activity;
         }
@@ -154,13 +218,16 @@ export default class ActivityStore {
             this.selectedActivity.attendees?.filter(
               (a) => a.username !== user?.username
             );
-        this.selectedActivity.isGoing = false;
+          this.selectedActivity.isGoing = false;
         } else {
-            const attendee = new Profile(user!);
-            this.selectedActivity?.attendees?.push(attendee);
-            this.selectedActivity!.isGoing = true;
+          const attendee = new Profile(user!);
+          this.selectedActivity?.attendees?.push(attendee);
+          this.selectedActivity!.isGoing = true;
         }
-        this.activityRegistry.set(this.selectedActivity!.id, this.selectedActivity!)
+        this.activityRegistry.set(
+          this.selectedActivity!.id,
+          this.selectedActivity!
+        );
       });
     } catch (error) {
       console.log(error);
@@ -171,31 +238,37 @@ export default class ActivityStore {
 
   cancelActivityToggle = async () => {
     this.loading = true;
-    try { 
+    try {
       await agent.Activities.attend(this.selectedActivity!.id);
       runInAction(() => {
-        this.selectedActivity!.isCancelled = !this.selectedActivity?.isCancelled;
-        this.activityRegistry.set(this.selectedActivity!.id, this.selectedActivity!);
-      })
+        this.selectedActivity!.isCancelled =
+          !this.selectedActivity?.isCancelled;
+        this.activityRegistry.set(
+          this.selectedActivity!.id,
+          this.selectedActivity!
+        );
+      });
     } catch (error) {
       console.log(error);
     } finally {
-      runInAction(() => this.loading = false);
+      runInAction(() => (this.loading = false));
     }
-  }
+  };
 
   clearSelectedActivity = () => {
     this.selectedActivity = undefined;
-  }
+  };
 
   updateAttendeeFollowing = (username: string) => {
-    this.activityRegistry.forEach(activity => {
-      activity.attendees.forEach(attendee => {
+    this.activityRegistry.forEach((activity) => {
+      activity.attendees.forEach((attendee) => {
         if (attendee.username === username) {
-          attendee.following ? attendee.followersCount-- : attendee.followersCount++;
+          attendee.following
+            ? attendee.followersCount--
+            : attendee.followersCount++;
           attendee.following = !attendee.following;
         }
-      })
-    })
-  }
+      });
+    });
+  };
 }
